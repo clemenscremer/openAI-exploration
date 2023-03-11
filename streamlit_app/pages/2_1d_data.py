@@ -1,7 +1,15 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
+import openai
+import tiktoken
+import os
+# setup choose model and setup encoding (for token count)
+openai.api_key = os.getenv("OPENAI_API_KEY")
+model = "gpt-3.5-turbo"
+encoding_name = "cl100k_base" # for chatGPT models (e.g. gpt-3.5-turbo)
 
+# functions
 @st.cache_data()
 def get_task_instruction(context, task):
     """add instructions specific to task to be performed"""
@@ -26,6 +34,42 @@ def generate_initial_data(n=10):
     return initial_data
 
 @st.cache_data()
+def initialize_chatbot(behavior):
+    messages = [
+        {"role": "system", 
+        "content": behavior}, # could also be sarcastic troll
+    ]
+    return messages
+
+@st.cache_data()
+def num_tokens_from_string(string: str, encoding_name: str) -> int:
+    """Returns the number of tokens in a text string."""
+    encoding = tiktoken.get_encoding(encoding_name)
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
+@st.cache_data()
+def get_assistant_response(prompt, model):
+    messages.append(
+        {"role": "user", "content": prompt},
+        )
+
+    chat = openai.ChatCompletion.create(
+        model=model, 
+        messages=messages,
+        max_tokens=1024, 
+        temperature=0.1,   # randomness of assistant. default = 1 
+        )
+    
+    # extract first response [0]
+    reply = chat.choices[0].message.content
+    # print assistant response
+    messages.append(
+        {"role": "assistant", "content": reply}
+        )
+    return reply
+
+@st.cache_data()
 def compose_plot(input_data, list_output):
     # plot input and output
     df_in = pd.DataFrame(input_data, columns=['input'])
@@ -48,7 +92,9 @@ def compose_plot(input_data, list_output):
     
 
 st.title("1d data")
-st.write("to do exploration on 1d data (e.g. time series) could be used for interpretation, annomaly detection, interpolation, extrapolation,...")
+st.write("""
+         to do exploration on 1d data (e.g. time series) could be used for interpretation, 
+         annomaly detection, interpolation, extrapolation. Can also be helpful in detecting inconsistencies in inputs.""")
 
 # context to be added to system or user message (e.g. )
 context = st.text_input(label="(optional) some context for interpretation", 
@@ -58,8 +104,12 @@ context = st.text_input(label="(optional) some context for interpretation",
 task = st.selectbox("select task", ["annomaly detection", "interpolation", "extrapolation", "interpretation"], key="task")
 
 # construct system message from context and task
-message = get_task_instruction(context, task)
-st.write(message)
+behavior = get_task_instruction(context, task)
+
+
+
+#messages = initialize_chatbot(behavior)
+st.write(behavior) # JUST TO CHECK, ERASE LATER
 
 
 
@@ -72,16 +122,25 @@ with col1:
     initial_data = generate_initial_data(n=10)
     # experiment with data editor (can handle pandas, pyarrow, numpy, snowflake dataframe, list,....)
     input_data = st.experimental_data_editor(initial_data, num_rows='dynamic', height=300)
-    
+    #num_tokens = num_tokens_from_string(input_data, encoding_name)
+    #st.write(f"Number of tokens: {num_tokens}")  
 with col2:
     st.write("**completion**")
-    st.text_area(label="completion", value="", key="completion", height=250, label_visibility='hidden')
+    if input_data:
+        #reply = get_assistant_response(input_data, model)
+        reply = str(initial_data)
+    else:    
+        reply = ""
+    st.text_area(label="completion", value=reply, key="completion", height=250, label_visibility='hidden')
     # INSERT COMPLETION HERE AND IN COLUMN 3,  INSERTED DUMMY FOR NOW
-    list_output = input_data 
-
+    list_output = pd.DataFrame(reply[1:-1].split(","), columns=['output']) 
+    list_output = list_output.astype(float)
+    
 with col3:
     st.write("**tabular output**")
-    st.experimental_data_editor(pd.DataFrame(list_output, columns=['output']), height=300)
+    st.experimental_data_editor(list_output, height=300)
+    num_tokens_out = num_tokens_from_string(reply, encoding_name)
+    st.write(f"Number of tokens: {num_tokens_out}")
   
   
   
