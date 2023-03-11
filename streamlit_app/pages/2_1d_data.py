@@ -4,6 +4,7 @@ import altair as alt
 import openai
 import tiktoken
 import os
+import regex as re
 # setup choose model and setup encoding (for token count)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 model = "gpt-3.5-turbo"
@@ -130,7 +131,11 @@ with col2:
     else:    
         reply = ""
     st.text_area(label="completion", value=reply, key="completion", height=125)
-    list_output = pd.DataFrame(reply[1:-1].split(","), columns=['output']) 
+    # use regex to find list in reply
+    list_output = pd.DataFrame((re.findall(r"\[([^\]]*)\]", reply)[0]).strip().split(','), columns=['output'])
+    #st.write(list_output.astype(bool))    
+    
+    #list_output = pd.DataFrame(reply[1:-1].split(","), columns=['output']) 
     #list_output = list_output.astype(bool)
     
 with col3:
@@ -143,11 +148,22 @@ with col3:
   
 st.write("----")    
 
-compose_plot(input_data, list_output)
+#st.write(re.findall(r"\[([^\]]*)\]", reply)[0].split(','))
+#list_output['output'] = list_output['output'].str.strip()	
 
 # convert list output dataframe to dtype bool
-list_output['output']  = list_output['output'].map({'True': True, 'False': False})
-st.write(list_output.count())	    
+#list_output['output']  = list_output['output'].map({'True': 0, 'False': 20})
+# TODO: extract just list. Be careful with whitespaces and dtypes
+reply_extract = re.findall(r"\[([^\]]*)\]", reply)[0].split(',') 
+# loop through list and eliminate whitespaces
+for i in range(len(reply_extract)):	
+    reply_extract[i] = reply_extract[i].strip()	
+df_reply = pd.DataFrame(reply_extract, columns = ['output'])
+df_reply['output bool']  = df_reply['output'].map({'True': 0, 'False': 20})
+st.write(df_reply)   
+
+
+compose_plot(input_data, df_reply[['output bool']])
 
 
 # add expandable
