@@ -5,6 +5,7 @@ import openai
 import tiktoken
 import os
 import regex as re
+import numpy as np # NOT NEEDED ANYMORE
 # setup choose model and setup encoding (for token count)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 model = "gpt-3.5-turbo"
@@ -31,7 +32,7 @@ def generate_initial_data(n=10):
     initial_data = [0, 1]
     for i in range(n-2):
         initial_data.append(initial_data[i] + initial_data[i+1])
-    initial_data = initial_data + initial_data[::-1] # DUMMY DATA. CAN BE EXCHANGED LATER WITH REAL DATA
+    initial_data = initial_data # DUMMY DATA. CAN BE EXCHANGED LATER WITH REAL DATA
     return initial_data
 
 @st.cache_data()
@@ -71,16 +72,24 @@ def get_assistant_response(prompt, model):
     return reply
 
 @st.cache_data()
-def compose_plot(input_data, list_output):
-    # plot input and output
-    df_in = pd.DataFrame(input_data, columns=['input'])
-    df_out = pd.DataFrame(list_output, columns=['output'])
-    df = pd.concat([df_in, df_out], axis=1, ignore_index=True)
-    df.columns = ['input', 'output']
-    df.index.name = 'index'	
-    # df to wide form for altair
-    data = df.reset_index().melt('index')
+def extract_list_from_reply(reply):
+    # isolate list in reply
+    reply_extract = re.findall(r"\[([^\]]*)\]", reply)[0].split(',') 
+    # loop through list and eliminate whitespaces
+    for i in range(len(reply_extract)):	
+        reply_extract[i] = reply_extract[i].strip()	
+    df_reply = pd.DataFrame(reply_extract, columns = ['output'])
+    df_reply['output']  = df_reply['output'].map({'True': True, 'False': False})
+    df_reply.index.name = 'index'	
+    return df_reply
 
+@st.cache_data()
+def compose_plot(input_data, df_reply):
+    # do some formatting (wide form for altair)
+    df_in = pd.DataFrame(input_data, columns=['input'])
+    df_in.index.name = 'index'
+    data = df_in.reset_index().melt('index')
+    
 
     # plot data
     c = alt.Chart(data).mark_point().encode(
@@ -88,7 +97,19 @@ def compose_plot(input_data, list_output):
         y='value',
         color='variable'
     )
-    st.altair_chart(c, use_container_width=True)
+    
+    # handle and plot annomalies 
+    annomalies = df_reply[df_reply['output'] == True].index.tolist()	    
+    data_annomaly = data[data['index'].isin(annomalies)]	
+    
+    ol = alt.Chart(data_annomaly).mark_point(
+        color='red', size=300, tooltip="annomaly").encode(
+        x='index',
+        y='value'
+    )
+        
+    st.altair_chart(c + ol, use_container_width=True)
+
     
     
 
@@ -144,26 +165,14 @@ with col3:
     num_tokens_out = num_tokens_from_string(reply, encoding_name)
     st.write(f"Number of tokens: {num_tokens_out}")
   
-  
+
   
 st.write("----")    
 
-#st.write(re.findall(r"\[([^\]]*)\]", reply)[0].split(','))
-#list_output['output'] = list_output['output'].str.strip()	
 
-# convert list output dataframe to dtype bool
-#list_output['output']  = list_output['output'].map({'True': 0, 'False': 20})
-# TODO: extract just list. Be careful with whitespaces and dtypes
-reply_extract = re.findall(r"\[([^\]]*)\]", reply)[0].split(',') 
-# loop through list and eliminate whitespaces
-for i in range(len(reply_extract)):	
-    reply_extract[i] = reply_extract[i].strip()	
-df_reply = pd.DataFrame(reply_extract, columns = ['output'])
-df_reply['output bool']  = df_reply['output'].map({'True': 0, 'False': 20})
-st.write(df_reply)   
+df_reply = extract_list_from_reply(reply)
 
-
-compose_plot(input_data, df_reply[['output bool']])
+compose_plot(input_data, df_reply)
 
 
 # add expandable
