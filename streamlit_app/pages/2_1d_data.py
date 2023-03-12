@@ -111,8 +111,7 @@ def compose_plot(input_data, df_reply):
     st.altair_chart(c + ol, use_container_width=True)
 
     
-    
-
+# main page
 st.title("1d data")
 st.write("""
          to do exploration on 1d data (e.g. time series) could be used for interpretation, 
