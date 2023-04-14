@@ -27,12 +27,21 @@ def get_task_instruction(context, task):
     elif task == "interpretation":
         return "The model should interpret the data."
 
-def generate_initial_data(n=10):
+def generate_initial_data(ini_data):
+    
+    if ini_data == "fibonacci":
         # generate list of fibonacci numbers as dummy data
-    initial_data = [0, 1]
-    for i in range(n-2):
-        initial_data.append(initial_data[i] + initial_data[i+1])
-    initial_data = initial_data # DUMMY DATA. CAN BE EXCHANGED LATER WITH REAL DATA
+        n=10
+        initial_data = [0, 1]
+        for i in range(n-2):
+            initial_data.append(initial_data[i] + initial_data[i+1])
+    elif ini_data == "water levels":
+        initial_data = pd.read_csv("./data/waterlevel.csv")['H'].to_list()
+        # limit values in initial_data to 2 digits
+        initial_data = [round(i, 2) for i in initial_data]	
+        initial_data = initial_data[10:100]
+
+       
     return initial_data
 
 @st.cache_data()
@@ -59,8 +68,8 @@ def get_assistant_response(prompt, model):
     chat = openai.ChatCompletion.create(
         model=model, 
         messages=messages,
-        max_tokens=1024, 
-        temperature=1,   # randomness of assistant. default = 1 
+        max_tokens=3200, 
+        temperature=0,   # randomness of assistant. default = 1 
         )
     
     # extract first response [0]
@@ -89,7 +98,6 @@ def compose_plot(input_data, df_reply):
     df_in = pd.DataFrame(input_data, columns=['input'])
     df_in.index.name = 'index'
     data = df_in.reset_index().melt('index')
-    
 
     # plot data
     c = alt.Chart(data).mark_point().encode(
@@ -127,37 +135,31 @@ behavior = get_task_instruction(context, task)
 messages = initialize_chatbot(behavior)
 #st.write(behavior) # JUST TO CHECK, ERASE LATER
 
+ini_data = st.selectbox("select initial data", ["fibonacci", "water levels"], key="initial_data")
+
 
 
 st.write("----")
 # create three columns with 1/6, 4/6, 1/6 width
-col1, col2, col3 = st.columns([2,5,3])
+col1, col2, col3 = st.columns([2,6,2])
 
 with col1:
     st.write("**input**")
-    initial_data = generate_initial_data(n=10)
+    initial_data = generate_initial_data(ini_data=ini_data)
     # experiment with data editor (can handle pandas, pyarrow, numpy, snowflake dataframe, list,....)
     input_data = st.experimental_data_editor(initial_data, num_rows='dynamic', height=300)
     num_tokens = num_tokens_from_string(str(input_data), encoding_name)
     st.write(f"Number of tokens: {num_tokens}")  
 with col2:
-    #st.write("**input**")
     st.text_area(label="input", value=input_data, key="input", height=125)
 
-    #st.write("**completion**")
     if input_data:
         reply = get_assistant_response(str(input_data), model)
-        #reply = str(initial_data)
     else:    
         reply = ""
     st.text_area(label="completion", value=reply, key="completion", height=125)
     # use regex to find list in reply
-    list_output = pd.DataFrame((re.findall(r"\[([^\]]*)\]", reply)[0]).strip().split(','), columns=['output'])
-    #st.write(list_output.astype(bool))    
-    
-    #list_output = pd.DataFrame(reply[1:-1].split(","), columns=['output']) 
-    #list_output = list_output.astype(bool)
-    
+    list_output = pd.DataFrame((re.findall(r"\[([^\]]*)\]", reply)[0]).strip().split(','), columns=['output'])    
 with col3:
     st.write("**tabular output**")
     st.experimental_data_editor(list_output, height=300)
